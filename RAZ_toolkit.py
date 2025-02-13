@@ -1,6 +1,5 @@
 import datetime
 import os.path
-
 import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -11,7 +10,7 @@ from scipy.stats import chi2_contingency
 import matplotlib.pyplot as plt
 import numpy as np
 from fpdf import FPDF
-
+import openpyxl
 
 class Driver:
 
@@ -79,13 +78,13 @@ class Driver:
         self.driver.get('https://www.kidsa-z.com/main/classreports#!/class/skill/report')
         sums = []
         self.driver.find_element(By.ID, "dateDropDown").click()
-        self.driver.find_element(By.XPATH, '//*[@id="mat-option-2"]/span').click()
+        self.driver.find_element(By.XPATH, '//*[@id="mat-option-43"]/span').click()
 
 
         for i, row in names.iterrows():
             try:
-                self.driver.find_element(By.ID, "studentsDropDown").click()
-                self.driver.find_element(By.ID, f"{i}-student-option").click()
+                self.driver.find_element(By.XPATH, '//*[@id="mat-select-8"]/div/div[2]').click()
+                self.driver.find_element(By.XPATH, f'//*[@id="mat-option-{15+i}"]/span/span').click()
                 WebDriverWait(self.driver, 3).until(
                     lambda x: x.find_element(By.XPATH, '//class-skill-report/div/div/table'))
             except selenium.common.exceptions.TimeoutException:
@@ -97,7 +96,7 @@ class Driver:
             # Parse the HTML using BeautifulSoup
             soup = BeautifulSoup(page_source, 'html.parser')
             # Find the div with the specified class
-            table = soup.find('table', {'class': 'table-data table-full table-reportsTable'})
+            table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
             if table:
                 # Extract column headers
                 headers = [th.text.strip() for th in table.find_all('th')]
@@ -180,7 +179,7 @@ class Driver:
 
         try:
             self.driver.find_element(By.ID, 'dateDropDown').click()
-            self.driver.find_element(By.XPATH, '//*[@id="mat-option-1"]/span').click()
+            self.driver.find_element(By.XPATH, '//*[@id="mat-option-29"]/span').click()
             WebDriverWait(self.driver, 3).until(
                     lambda x: x.find_element(By.XPATH, '//*[@id="classActivityTable"]'))
         except selenium.common.exceptions.TimeoutException:
@@ -472,8 +471,13 @@ def class_data(user='Everett302', pword='gtyhps302'):
     d.login(user, pword)
     j = d.get_student_accuracy_data(d.get_student_list())
     print(j)
-    j.to_csv(f'{datetime.date.today()}_{user}_Accuracy_Report.csv', index=False)
-    print("Class accuracy spreadsheet created")
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    file_path = os.path.join(parent_dir, f'{datetime.date.today()}_{user}_Accuracy_Report.csv')
+    j.to_csv(file_path, index=False)
+
+    print(f'{datetime.date.today()}_{user}_Accuracy_Report.csv Created')
     d.quit()
 
 
