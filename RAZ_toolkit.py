@@ -4,13 +4,13 @@ import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 from bs4 import BeautifulSoup
 from scipy.stats import chi2_contingency
 import matplotlib.pyplot as plt
 import numpy as np
 from fpdf import FPDF
-import openpyxl
 
 class Driver:
 
@@ -78,33 +78,65 @@ class Driver:
         self.driver.get('https://www.kidsa-z.com/main/classreports#!/class/skill/report')
         sums = []
         self.driver.find_element(By.ID, "dateDropDown").click()
-        self.driver.find_element(By.XPATH, '//*[@id="mat-option-43"]/span').click()
+        element = self.driver.find_element(By.CSS_SELECTOR, "span.mat-option-text")
+        if "Last 30 Days" in element.text:
+            element.click()
+
+        dropdown = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
+        )
+        dropdown.click()
+        options = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+        )
+
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # This I think needs to be simplified, something like using the names list retrieved in the get_names_list function,
+        # Then It can iterate through the text from the names list to find the options in the dropdown to iterate through
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-        for i, row in names.iterrows():
+        # Store the options in a list
+        option_texts = [option.text for option in options]
+
+        for option_text in option_texts:
+            # Open the dropdown again before each selection
+            dropdown = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
+            )
+            dropdown.click()
+
+            # Wait for dropdown options to be visible again
+            options = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+            )
+
+            # Find the option that matches the current iteration's text
+            for option in options:
+                if option.text == option_text:
+                    option.click()
+                    break  # Click only once and exit loop
+
             try:
-                self.driver.find_element(By.XPATH, '//*[@id="mat-select-8"]/div/div[2]').click()
-                self.driver.find_element(By.XPATH, f'//*[@id="mat-option-{15+i}"]/span/span').click()
-                WebDriverWait(self.driver, 3).until(
-                    lambda x: x.find_element(By.XPATH, '//class-skill-report/div/div/table'))
+                # 🚀 Now scrape the table (modify as needed)
+                page_source = self.driver.page_source
+                # Parse the HTML using BeautifulSoup
+                soup = BeautifulSoup(page_source, 'html.parser')
+                # Find the div with the specified class
+                table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
+                if table:
+                    # Extract column headers
+                    headers = [th.text.strip() for th in table.find_all('th')]
+                    # Extract rows
+                    data = []
+                    for row in table.find_all('tr')[1:]:  # Skip the header row
+                        row_data = [td.text.strip() for td in row.find_all('td')]
+                        data.append(row_data)
+
             except selenium.common.exceptions.TimeoutException:
                 print(f"Table not found for {row['Name']}.")
                 sums.append(None)
                 continue
-
-            page_source = self.driver.page_source
-            # Parse the HTML using BeautifulSoup
-            soup = BeautifulSoup(page_source, 'html.parser')
-            # Find the div with the specified class
-            table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
-            if table:
-                # Extract column headers
-                headers = [th.text.strip() for th in table.find_all('th')]
-                # Extract rows
-                data = []
-                for row in table.find_all('tr')[1:]:  # Skip the header row
-                    row_data = [td.text.strip() for td in row.find_all('td')]
-                    data.append(row_data)
 
             # Create a Pandas DataFrame
             accuracy_data = pd.DataFrame(data, columns=headers)
