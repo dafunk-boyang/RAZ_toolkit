@@ -87,7 +87,7 @@ class Driver:
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "class-reports-students-filter mat-select"))
             )
             dropdown.click()
-            time.sleep(1)  # Short delay to ensure dropdown is fully open
+            time.sleep(0.1)  # Short delay to ensure dropdown is fully open
 
             # Re-locate the options each time
             options = WebDriverWait(self.driver, 10).until(
@@ -108,30 +108,46 @@ class Driver:
                 continue  # Skip to the next student
 
             # Wait for the page to update after selection
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.XPATH,
-                                                "/html/body/div[5]/div/ui-view/class-reports/div/ui-view/class-skill/ui-view/class-skill-report/div/div/table/tbody/tr[1]"))
-            )
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH,
+                                                    "/html/body/div[5]/div/ui-view/class-reports/div/ui-view/class-skill/ui-view/class-skill-report/div/div/table/tbody/tr[1]"))
+                )
+                # Scrape the table
+                page_source = self.driver.page_source
+                soup = BeautifulSoup(page_source, 'html.parser')
 
-            # Scrape the table
-            page_source = self.driver.page_source
-            soup = BeautifulSoup(page_source, 'html.parser')
+                # try:
+                # # 🚀 Now scrape the table (modify as needed)
+                #                         page_source = self.driver.page_source
+                #                         # Parse the HTML using BeautifulSoup
+                #                         soup = BeautifulSoup(page_source, 'html.parser')
+                #                         # Find the div with the specified class
+                #                         table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
+                #                         if table:
+                #                             headers = [th.text.strip() for th in table.find_all('th')]
+                #                             for row in table.find_all('tr')[1:]:  # Skip the header row
+                #                                 row_data = [td.text.strip() for td in row.find_all('td')]
+                #                                 data.append(row_data)
+                #                     except selenium.common.exceptions.TimeoutException:
+                #                         print(f"Table not found for {row['Name']}.")
+                #                         sums.append(None)
+                #                         continue
+                # Locate the table
+                table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
 
-            # Locate the table
-            table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
-            if not table:
-                print(f"Table not found for {name}. Skipping.")
-                sums.append(None)
-                continue
+                # Extract column headers
+                headers = [th.text.strip() for th in table.find_all('th')]
 
-            # Extract column headers
-            headers = [th.text.strip() for th in table.find_all('th')]
-
-            # Extract table data
-            data = []
-            for row in table.find_all('tr')[1:]:  # Skip header row
-                row_data = [td.text.strip() for td in row.find_all('td')]
-                data.append(row_data)
+                # Extract table data
+                data = []
+                for row in table.find_all('tr')[1:]:  # Skip header row
+                    row_data = [td.text.strip() for td in row.find_all('td')]
+                    data.append(row_data)
+            except selenium.common.exceptions.TimeoutException:
+                    print(f"Table not found for {name}. Skipping.")
+                    sums.append(None)
+                    continue
 
             # Create a DataFrame
             accuracy_data = pd.DataFrame(data, columns=headers)
