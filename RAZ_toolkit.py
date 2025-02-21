@@ -11,6 +11,7 @@ from scipy.stats import chi2_contingency
 import matplotlib.pyplot as plt
 import numpy as np
 from fpdf import FPDF
+import time
 
 class Driver:
 
@@ -30,7 +31,7 @@ class Driver:
         # find login input fields and input credentials
         try:
             self.driver.get("https://accounts.learninga-z.com/ng/member/login?siteAbbr=kaz")
-            WebDriverWait(self.driver, 10).until(lambda x: x.find_element(By.NAME, "username"))
+            WebDriverWait(self.driver, 20).until(lambda x: x.find_element(By.NAME, "username"))
         except selenium.common.exceptions.TimeoutException:
             print("Page Timed out, please try again")
 
@@ -77,77 +78,165 @@ class Driver:
     def get_student_accuracy_data(self, names):
         self.driver.get('https://www.kidsa-z.com/main/classreports#!/class/skill/report')
         sums = []
-        self.driver.find_element(By.ID, "dateDropDown").click()
-        element = self.driver.find_element(By.CSS_SELECTOR, "span.mat-option-text")
-        if "Last 30 Days" in element.text:
-            element.click()
 
-        dropdown = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
-        )
-        dropdown.click()
-        options = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
-        )
+        for name in names['Name']:
+            print(f"Processing: {name}")  # Debugging print statement
 
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # This I think needs to be simplified, something like using the names list retrieved in the get_names_list function,
-        # Then It can iterate through the text from the names list to find the options in the dropdown to iterate through
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-        # Store the options in a list
-        option_texts = [option.text for option in options]
-
-        for option_text in option_texts:
-            # Open the dropdown again before each selection
+            # Re-locate and click the dropdown for each student
             dropdown = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "class-reports-students-filter mat-select"))
             )
             dropdown.click()
+            time.sleep(1)  # Short delay to ensure dropdown is fully open
 
-            # Wait for dropdown options to be visible again
+            # Re-locate the options each time
             options = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
             )
 
-            # Find the option that matches the current iteration's text
+            found = False  # Flag to track if the name was found
             for option in options:
-                if option.text == option_text:
+                print(f"Checking option: {option.text}")  # Debugging print
+                if option.text.strip() == name:
                     option.click()
-                    break  # Click only once and exit loop
+                    found = True
+                    break  # Exit loop after clicking
 
-            try:
-                # 🚀 Now scrape the table (modify as needed)
-                page_source = self.driver.page_source
-                # Parse the HTML using BeautifulSoup
-                soup = BeautifulSoup(page_source, 'html.parser')
-                # Find the div with the specified class
-                table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
-                if table:
-                    # Extract column headers
-                    headers = [th.text.strip() for th in table.find_all('th')]
-                    # Extract rows
-                    data = []
-                    for row in table.find_all('tr')[1:]:  # Skip the header row
-                        row_data = [td.text.strip() for td in row.find_all('td')]
-                        data.append(row_data)
+            if not found:
+                print(f"Warning: {name} not found in dropdown!")
+                sums.append(None)
+                continue  # Skip to the next student
 
-            except selenium.common.exceptions.TimeoutException:
-                print(f"Table not found for {row['Name']}.")
+            # Wait for the page to update after selection
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.XPATH,
+                                                "/html/body/div[5]/div/ui-view/class-reports/div/ui-view/class-skill/ui-view/class-skill-report/div/div/table/tbody/tr[1]"))
+            )
+
+            # Scrape the table
+            page_source = self.driver.page_source
+            soup = BeautifulSoup(page_source, 'html.parser')
+
+            # Locate the table
+            table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
+            if not table:
+                print(f"Table not found for {name}. Skipping.")
                 sums.append(None)
                 continue
 
-            # Create a Pandas DataFrame
-            accuracy_data = pd.DataFrame(data, columns=headers)
-            sums.append(accuracy_data['Correct'].astype(int).sum() / accuracy_data['Total'].astype(int).sum())
-            accuracy_data['Skill'] = accuracy_data['Skill'].apply(
-                lambda x: ' '.join(x.split('\n\n')[:-1]) if '\n\n' in x else x)
+            # Extract column headers
+            headers = [th.text.strip() for th in table.find_all('th')]
 
+            # Extract table data
+            data = []
+            for row in table.find_all('tr')[1:]:  # Skip header row
+                row_data = [td.text.strip() for td in row.find_all('td')]
+                data.append(row_data)
+
+            # Create a DataFrame
+            accuracy_data = pd.DataFrame(data, columns=headers)
+
+            # Compute accuracy and store it
+            sums.append(accuracy_data['Correct'].astype(int).sum() / accuracy_data['Total'].astype(int).sum())
+
+            # Format the 'Skill' column
+            accuracy_data['Skill'] = accuracy_data['Skill'].apply(
+                lambda x: ' '.join(x.split('\n\n')[:-1]) if '\n\n' in x else x
+            )
+
+        # Add computed accuracies to names DataFrame
         names['Overall Skills Accuracy'] = sums
         accuracies = names
         accuracies.rename(columns={'Overall Skills Accuracy': f'{datetime.date.today()}'}, inplace=True)
+
         return accuracies
+    # def get_student_accuracy_data(self, names):
+    #     self.driver.get('https://www.kidsa-z.com/main/classreports#!/class/skill/report')
+    #     sums = []
+    #     # self.driver.find_element(By.ID, "dateDropDown").find_element(By.CSS_SELECTOR, "span.mat-option-text").click()
+    #
+    #     #
+    #     # dropdown = WebDriverWait(self.driver, 10).until(
+    #     #     EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
+    #     # )
+    #     # dropdown = WebDriverWait(self.driver, 10).until(
+    #     #     EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-arrow-wrapper.ng-tns-c647416370-9")))
+    #
+    #
+    #     # dropdown.click()
+    #     # options = WebDriverWait(self.driver, 10).until(
+    #     #     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+    #     # )
+    #
+    #     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    #     # This I think needs to be simplified, something like using the names list retrieved in the get_names_list function,
+    #     # Then It can iterate through the text from the names list to find the options in the dropdown to iterate through
+    #     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    #
+    #
+    #     for name in names['Name']:
+    #
+    #
+    #         dropdown = self.driver.find_element(
+    #             By.CSS_SELECTOR, "class-reports-students-filter").find_element(By.CSS_SELECTOR,"mat-select")
+    #         dropdown.click()
+    #
+    #         # dropdown = WebDriverWait(self.driver, 10).until(
+    #         #     EC.element_to_be_clickable((By.CSS_SELECTOR, "div.mat-select-value"))
+    #         # )
+    #         # dropdown.click()
+    #
+    #         WebDriverWait(self.driver, 10).until(
+    #             EC.element_to_be_clickable((By.CSS_SELECTOR, "span.mat-option-text")))
+    #
+    #         # Wait for dropdown options to be visible again
+    #         options = WebDriverWait(self.driver, 10).until(
+    #             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+    #         )
+    #
+    #         data = []
+    #
+    #         # Find the option that matches the current iteration's text
+    #         for i in range(len(options[1:])):
+    #             options = WebDriverWait(self.driver, 10).until(
+    #                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+    #             )
+    #             for option in options:
+    #                 if option.text == name:
+    #                     option.click()
+    #                     WebDriverWait(self.driver,10).until(lambda x:x.find_element(
+    #                         By.XPATH,"/html/body/div[5]/div/ui-view/class-reports/div/ui-view/class-skill/ui-view/class-skill-report/div/div/table/tbody/tr[1]"))
+    #                     try:
+    #                         # 🚀 Now scrape the table (modify as needed)
+    #                         page_source = self.driver.page_source
+    #                         # Parse the HTML using BeautifulSoup
+    #                         soup = BeautifulSoup(page_source, 'html.parser')
+    #                         # Find the div with the specified class
+    #                         table = soup.find('table', {'class': 'table-data table-full table-reportsTable table-orion'})
+    #                         if table:
+    #                             headers = [th.text.strip() for th in table.find_all('th')]
+    #                             for row in table.find_all('tr')[1:]:  # Skip the header row
+    #                                 row_data = [td.text.strip() for td in row.find_all('td')]
+    #                                 data.append(row_data)
+    #                     except selenium.common.exceptions.TimeoutException:
+    #                         print(f"Table not found for {row['Name']}.")
+    #                         sums.append(None)
+    #                         continue
+    #
+    #                 continue  # Click only once and exit loop
+    #         # Create a Pandas DataFrame
+    #         accuracy_data = pd.DataFrame(data, columns=headers)
+    #         sums.append(accuracy_data['Correct'].astype(int).sum() / accuracy_data['Total'].astype(int).sum())
+    #         accuracy_data['Skill'] = accuracy_data['Skill'].apply(
+    #             lambda x: ' '.join(x.split('\n\n')[:-1]) if '\n\n' in x else x)
+    #
+    #     names['Overall Skills Accuracy'] = sums
+    #     accuracies = names
+    #     accuracies.rename(columns={'Overall Skills Accuracy': f'{datetime.date.today()}'}, inplace=True)
+    #
+    #     breakpoint()
+    #
+    #     return accuracies
 
     def navigate_to_student_activity_page(self, student_num):
         self.driver.get("https://www.kidsa-z.com/main/classreports#!/class/activity?subject=")
