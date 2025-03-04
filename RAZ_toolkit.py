@@ -96,7 +96,6 @@ class Driver:
 
             found = False  # Flag to track if the name was found
             for option in options:
-                print(f"Checking option: {option.text}")  # Debugging print
                 if option.text.strip() == name:
                     option.click()
                     found = True
@@ -109,10 +108,17 @@ class Driver:
 
             # Wait for the page to update after selection
             try:
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH,
-                                                    "/html/body/div[5]/div/ui-view/class-reports/div/ui-view/class-skill/ui-view/class-skill-report/div/div/table/tbody/tr[1]"))
-                )
+                # Debugging statement, Some users were not locating the data table
+                try:
+                    WebDriverWait(self.driver, 15).until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, "//table[contains(@class, 'table-reportsTable')]//tr"))
+                    )
+                    print("Table found and ready!")
+                except:
+                    print("Timeout: Table did not appear within the wait time!")
+
+
                 # Scrape the table
                 page_source = self.driver.page_source
                 soup = BeautifulSoup(page_source, 'html.parser')
