@@ -44,7 +44,7 @@ class Driver:
             try:
                 WebDriverWait(self.driver, 10).until(
                     lambda x: x.find_element(By.XPATH, '//*[@id="manageStudents"]/laz-popover-target/button'))
-                WebDriverWait(self.driver, 10).until(lambda x: x.find_element(By.ID, "onetrust-accept-btn-handler"))
+                WebDriverWait(self.driver, 15).until(lambda x: x.find_element(By.ID, "onetrust-accept-btn-handler"))
                 if self.driver.find_element(By.XPATH, '//*[@id="onetrust-accept-btn-handler"]'):
                     self.driver.find_element(By.XPATH, '//*[@id="onetrust-accept-btn-handler"]').click()
             except selenium.common.exceptions.NoSuchElementException:
@@ -82,41 +82,52 @@ class Driver:
         for name in names['Name']:
             print(f"Processing: {name}")  # Debugging print statement
 
-            # Re-locate and click the dropdown for each student
-            dropdown = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "class-reports-students-filter mat-select"))
-            )
-            dropdown.click()
-            time.sleep(0.1)  # Short delay to ensure dropdown is fully open
+            try:
+                students_dropdown = self.driver.find_element(By.XPATH,
+                                                        "//label[text()='Students']/ancestor::lib-drop-down-filter-groups-search//mat-form-field")
+                students_dropdown.click()
+                # # Re-locate and click the dropdown for each student
+                # dropdown = WebDriverWait(self.driver, 15).until(
+                #     EC.element_to_be_clickable((By.CSS_SELECTOR, "class-reports-students-filter mat-select"))
+                # )
+                # time.sleep(0.1)
+                # dropdown.click()
+                  # Short delay to ensure dropdown is fully open
 
-            # Re-locate the options each time
-            options = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
-            )
 
-            found = False  # Flag to track if the name was found
-            for option in options:
-                if option.text.strip() == name:
-                    option.click()
-                    found = True
-                    break  # Exit loop after clicking
+                # Re-locate the options each time
+                options = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.mat-option-text"))
+                )
 
-            if not found:
-                print(f"Warning: {name} not found in dropdown!")
-                sums.append(None)
-                continue  # Skip to the next student
+
+                for option in options:
+                    if option.text.strip() == name:
+                        option.click()
+
+                        break  # Exit loop after clicking
+
+            except selenium.common.exceptions.TimeoutException:
+                print(f"Timeout when finding student filter dropdown for {name}")
+            #
+            # if not found:
+            #     print(f"Warning: {name} not found in dropdown!")
+            #     sums.append(None)
+            #     continue  # Skip to the next student
 
             # Wait for the page to update after selection
             try:
                 # Debugging statement, Some users were not locating the data table
                 try:
-                    WebDriverWait(self.driver, 15).until(
+                    WebDriverWait(self.driver, 10).until(
                         EC.presence_of_element_located(
                             (By.XPATH, "//table[contains(@class, 'table-reportsTable')]//tr"))
                     )
                     print("Table found and ready!")
                 except:
                     print("Timeout: Table did not appear within the wait time!")
+                    sums.append(None)
+                    continue
 
 
                 # Scrape the table
@@ -219,8 +230,18 @@ class Driver:
         self.driver.get('https://www.kidsa-z.com/main/classreports#!/class/activity?subject=')
 
         try:
+            # Open dropdown
             self.driver.find_element(By.ID, 'dateDropDown').click()
-            self.driver.find_element(By.XPATH, '//*[@id="mat-option-29"]/span').click()
+
+            # Locate "Last 7 Days"
+            option_to_click = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[@class='mat-option-text' and text()=' Last 7 Days ']"))
+            )
+            # Click the option for "Last 7 Days"
+            option_to_click.click()
+
+            # self.driver.find_element(By.XPATH, '//*[@id="mat-option-29"]/span').click()
+
             WebDriverWait(self.driver, 3).until(
                     lambda x: x.find_element(By.XPATH, '//*[@id="classActivityTable"]'))
         except selenium.common.exceptions.TimeoutException:
